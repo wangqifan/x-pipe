@@ -28,9 +28,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.*;
 import java.util.stream.IntStream;
 
 /**
@@ -74,8 +72,11 @@ public class DefaultMetaCache extends AbstractMetaCache implements MetaCache, Co
 
     protected AtomicBoolean taskTrigger = new AtomicBoolean(false);
 
-    private final Lock lock = new ReentrantLock();
-    protected final Condition condition = lock.newCondition();
+    private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    private final Lock readLock = readWriteLock.readLock();
+    private final Lock writeLock = readWriteLock.writeLock();
+
+    protected final Condition condition = writeLock.newCondition();
 
     @Override
     public void isleader() {
@@ -94,7 +95,7 @@ public class DefaultMetaCache extends AbstractMetaCache implements MetaCache, Co
     @Override
     public XpipeMeta getXpipeMetaLongPull(long version) throws InterruptedException {
         XpipeMeta xpipeMeta = null;
-        if(lock.tryLock(consoleConfig.getCacheRefreshInterval(), TimeUnit.MILLISECONDS)) {
+        if(readLock.tryLock(consoleConfig.getCacheRefreshInterval(), TimeUnit.MILLISECONDS)) {
             try {
                 if(getVersion() <= version) {
                     condition.await(consoleConfig.getCacheRefreshInterval(), TimeUnit.MILLISECONDS);
@@ -103,7 +104,7 @@ public class DefaultMetaCache extends AbstractMetaCache implements MetaCache, Co
             } catch (Exception e) {
                 logger.debug("[getXpipeMeta]", e);
             } finally {
-                lock.unlock();
+                readLock.unlock();
             }
         } else {
             xpipeMeta = meta.getKey();
@@ -134,12 +135,12 @@ public class DefaultMetaCache extends AbstractMetaCache implements MetaCache, Co
             protected void doRun() throws Exception {
                 if(!taskTrigger.get())
                     return;
-                if(lock.tryLock(consoleConfig.getCacheRefreshInterval(), TimeUnit.MILLISECONDS)) {
+                if(writeLock.tryLock(consoleConfig.getCacheRefreshInterval(), TimeUnit.MILLISECONDS)) {
                     try {
                         loadCache();
                         condition.signalAll();
                     } finally {
-                        lock.unlock();
+                        writeLock.unlock();
                     }
                 }
             }
