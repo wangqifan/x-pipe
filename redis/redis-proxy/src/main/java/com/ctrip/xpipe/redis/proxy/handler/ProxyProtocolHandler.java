@@ -14,6 +14,7 @@ import com.ctrip.xpipe.utils.StringUtil;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
+import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +54,7 @@ public class ProxyProtocolHandler extends ChannelInboundHandlerAdapter {
                 protocol.recordForwardFor((InetSocketAddress) ctx.channel().remoteAddress());
             }
             tunnel = tunnelManager.create(ctx.channel(), protocol);
-            uninstallSelf(ctx);
+            uninstallSelf(ctx, msg);
         } else if(msg instanceof ProxyRequestResponseProtocol) {
             ProxyRequestResponseProtocol protocol = (ProxyRequestResponseProtocol) msg;
             logger.debug("[ProxyRequestResponseProtocol][{}] {}", ChannelUtil.getDesc(ctx.channel()), protocol.getContent());
@@ -65,12 +66,13 @@ public class ProxyProtocolHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void uninstallSelf(ChannelHandlerContext ctx) {
+    private void uninstallSelf(ChannelHandlerContext ctx, Object msg) {
         if(tunnel == null) {
             logger.error("[initChannel] tunnel should not be null");
             return;
         }
         ChannelPipeline pipeline = ctx.channel().pipeline();
+        ReferenceCountUtil.release(msg);
         pipeline.remove(this);
     }
 }
