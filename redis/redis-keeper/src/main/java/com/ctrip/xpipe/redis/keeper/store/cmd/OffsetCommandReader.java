@@ -52,10 +52,12 @@ public class OffsetCommandReader extends AbstractFlyingThresholdCommandReader<Re
             if (null != replDelayConfig
                     && (delayBytes = replDelayConfig.getDelayBytes()) > 0 && (delayMilli = replDelayConfig.getDelayMilli()) > 0) {
                 logger.debug("[readDelay]{}:{}", delayBytes, delayMilli);
-                Thread.sleep(delayMilli);
+                offsetNotifier.awaitSlowQueue(curPosition + delayBytes, delayMilli);
+            } else if (milliSeconds >= 0) {
+                offsetNotifier.await(curPosition, milliSeconds);
+            } else {
+                offsetNotifier.await(curPosition);
             }
-            if (milliSeconds < 0) offsetNotifier.await(curPosition);
-            else offsetNotifier.await(curPosition, milliSeconds);
             readNextFileIfNecessary();
         } catch (InterruptedException e) {
             logger.info("[read]", e);
